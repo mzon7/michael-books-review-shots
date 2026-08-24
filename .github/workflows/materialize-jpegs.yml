@@ -1,0 +1,46 @@
+name: Materialize alignment JPEGs
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  materialize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download alignment JPEGs from staging URLs
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json, pathlib, urllib.request
+          items = json.loads(pathlib.Path('sources.json').read_text())
+          for item in items:
+              path = pathlib.Path(item['path'])
+              path.parent.mkdir(parents=True, exist_ok=True)
+              print('fetch', item['url'], '->', path)
+              urllib.request.urlretrieve(item['url'], path)
+              data = path.read_bytes()
+              if data[:2] != b'\xff\xd8':
+                  raise SystemExit(f'not jpeg: {path} magic={data[:4]!r}')
+              print(' ok', path, len(data), 'bytes')
+          PY
+      - name: Commit binary JPEGs
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add kaiju/before_idle_1600x900.jpg \
+                  kaiju/before_idle_board_crop.jpg \
+                  kaiju/after_idle_1600x900.jpg \
+                  kaiju/after_idle_board_crop.jpg \
+                  kaiju/after_forest_spread_1600x900.jpg \
+                  kaiju/after_ice_freeze_1600x900.jpg
+          if git diff --cached --quiet; then
+            echo "no changes"
+          else
+            git commit -m "Add Kaiju alignment review JPEGs"
+            git push
+          fi
